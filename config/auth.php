@@ -1,6 +1,32 @@
 <?php
 include("./config/connection.php");
 
+/**
+ * Get token from POST body or Authorization header
+ */
+function getToken()
+{
+    // 1️⃣ POST body
+    if (!empty($_POST['token'])) {
+        return $_POST['token'];
+    }
+
+    // 2️⃣ Authorization header (Apache-safe)
+    if (function_exists('getallheaders')) {
+        $headers = getallheaders();
+
+        if (!empty($headers['Authorization'])) {
+            // Bearer token support
+            if (preg_match('/Bearer\s(\S+)/', $headers['Authorization'], $matches)) {
+                return $matches[1];
+            }
+            return trim($headers['Authorization']);
+        }
+    }
+
+    return null;
+}
+
 function getUserId($token)
 {
     global $CON;
@@ -11,12 +37,11 @@ function getUserId($token)
     mysqli_stmt_execute($stmt);
     $result = mysqli_stmt_get_result($stmt);
 
-    if (!$result || mysqli_num_rows($result) == 0) {
+    if (!$result || mysqli_num_rows($result) === 0) {
         return null;
     }
 
-    $row = mysqli_fetch_assoc($result);
-    return $row['user_id'];
+    return mysqli_fetch_assoc($result)['user_id'];
 }
 
 function isAdmin($userId)
@@ -29,11 +54,9 @@ function isAdmin($userId)
     mysqli_stmt_execute($stmt);
     $result = mysqli_stmt_get_result($stmt);
 
-    if (!$result || mysqli_num_rows($result) == 0) {
+    if (!$result || mysqli_num_rows($result) === 0) {
         return false;
     }
 
-    $row = mysqli_fetch_assoc($result);
-
-    return $row['role'] === 'admin';
+    return mysqli_fetch_assoc($result)['role'] === 'admin';
 }
