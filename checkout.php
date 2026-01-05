@@ -3,91 +3,71 @@
 include("./config/connection.php");
 include("./config/auth.php");
 
-/* AUTH */
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    exit(json_encode(["success" => false, "message" => "Invalid method"]));
+}
+
 $token = getToken();
 $user_id = getUserId($token);
+
 if (!$user_id) {
-    echo json_encode(["success" => false, "message" => "Unauthorized"]);
-    exit;
+    exit(json_encode(["success" => false, "message" => "Invalid token"]));
 }
 
-/* INPUT */
-if (!isset($_POST['payment_method'])) {
-    echo json_encode(["success" => false, "message" => "payment_method required"]);
-    exit;
-}
-
-$payment_method = strtoupper($_POST['payment_method']);
-$allowed = ['COD', 'IPS', 'KHALTI'];
-
-if (!in_array($payment_method, $allowed)) {
-    echo json_encode(["success" => false, "message" => "Invalid payment method"]);
-    exit;
-}
-
-/* CALCULATE CART TOTAL */
-$sql = "SELECT SUM(f.price * c.quantity) total
-        FROM carts c
-        JOIN foods f ON f.id=c.food_id
-        WHERE c.user_id=?";
+/* Get cart */
+$sql = "
+SELECT c.food_id, f.price, c.quantity
+FROM carts c
+JOIN foods f ON f.id = c.food_id
+WHERE c.user_id = ?
+";
 $stmt = mysqli_prepare($CON, $sql);
 mysqli_stmt_bind_param($stmt, "i", $user_id);
 mysqli_stmt_execute($stmt);
-$total = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt))['total'];
+$result = mysqli_stmt_get_result($stmt);
 
-if (!$total) {
-    echo json_encode(["success" => false, "message" => "Cart empty"]);
-    exit;
+if (mysqli_num_rows($result) == 0) {
+    exit(json_encode(["success" => false, "message" => "Cart is empty"]));
 }
 
-/* CREATE ORDER */
-$sql = "INSERT INTO orders (user_id,total_amount,payment_method)
-        VALUES (?,?,?)";
+$total = 0;
+$items = [];
+
+while ($row = mysqli_fetch_assoc($result)) {
+    $row['subtotal'] = $row['price'] * $row['quantity'];
+    $total += $row['subtotal'];
+    $items[] = $row;
+}
+
+/* Create order */
+$sql = "INSERT INTO orders (user_id, total_amount, payment_method) VALUES (?, ?, 'COD')";
 $stmt = mysqli_prepare($CON, $sql);
-mysqli_stmt_bind_param($stmt, "ids", $user_id, $total, $payment_method);
+mysqli_stmt_bind_param($stmt, "id", $user_id, $total);
 mysqli_stmt_execute($stmt);
+
 $order_id = mysqli_insert_id($CON);
 
-/* PAYMENT LOGIC */
-if ($payment_method === 'COD') {
-
-    mysqli_query($CON, "INSERT INTO payments 
-        (order_id,payment_method,amount,status)
-        VALUES ($order_id,'COD',$total,'pending')");
-
-    echo json_encode([
-        "success" => true,
-        "message" => "Order placed with COD",
-        "order_id" => $order_id
-    ]);
+/* Insert order items */
+foreach ($items as $item) {
+    $sql = "INSERT INTO order_items (order_id, food_id, price, quantity)
+            VALUES (?, ?, ?, ?)";
+    $stmt = mysqli_prepare($CON, $sql);
+    mysqli_stmt_bind_param(
+        $stmt,
+        "iidi",
+        $order_id,
+        $item['food_id'],
+        $item['price'],
+        $item['quantity']
+    );
+    mysqli_stmt_execute($stmt);
 }
 
-/* IPS (manual payment) */ elseif ($payment_method === 'IPS') {
-
-    mysqli_query($CON, "INSERT INTO payments 
-        (order_id,payment_method,amount,status)
-        VALUES ($order_id,'IPS',$total,'pending')");
-
-    echo json_encode([
-        "success" => true,
-        "message" => "Order placed. Complete IPS payment.",
-        "order_id" => $order_id,
-        "bank_details" => "Nabil Bank | AC: 123456"
-    ]);
-}
-
-/* KHALTI */ else {
-
-    mysqli_query($CON, "INSERT INTO payments 
-        (order_id,payment_method,amount,status)
-        VALUES ($order_id,'KHALTI',$total,'pending')");
-
-    echo json_encode([
-        "success" => true,
-        "order_id" => $order_id,
-        "khalti_amount" => $total * 100
-    ]);
-}
-
-/* CLEAR CART */
+/* Clear cart */
 mysqli_query($CON, "DELETE FROM carts WHERE user_id=$user_id");
+
+echo json_encode([
+    "success" => true,
+    "order_id" => $order_id,
+    "total" => $total
+]);
