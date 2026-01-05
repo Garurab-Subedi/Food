@@ -40,7 +40,7 @@ while ($row = mysqli_fetch_assoc($result)) {
 }
 
 /* Create order */
-$sql = "INSERT INTO orders (user_id, total_amount, payment_method) VALUES (?, ?, 'khalti')";
+$sql = "INSERT INTO orders (user_id, total_amount, payment_method) VALUES (?, ?, 'COD')";
 $stmt = mysqli_prepare($CON, $sql);
 mysqli_stmt_bind_param($stmt, "id", $user_id, $total);
 mysqli_stmt_execute($stmt);
