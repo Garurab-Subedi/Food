@@ -70,7 +70,7 @@ if ($image['size'] > 5 * 1024 * 1024) {
 /* ================= IMAGE UPLOAD ================= */
 
 
-$image_dir = "/Applications/XAMPP/xamppfiles/htdocs/fooddelivery/image/";
+$image_dir = "/Applications/XAMPP/xamppfiles/htdocs/fooddeliverY/image/";
 
 if (!is_dir($image_dir)) {
     mkdir($image_dir, 0777, true);
